@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+     <title>Yadira Rico</title>
+     <link rel="stylesheet" href="estilo.css">
+ </head>
+ <body>
+    <div class="contenedor" id="app">
+        <div id="welcome" role="dialog" aria-modal="true" aria-labelledby="welcomeTitle">
+          <button id="startBtn" aria-label="Start surprise">Presiona</button>
+        </div>
+        <h1 id="message" aria-live="polite">Para la arqui mas hermosa</h1>
+        <canvas id="flowers" aria-hidden="true"></canvas>
+        <div id="finalMsg" aria-live="polite">Disfruta estas flores eternas, te las mereces</div>
+    </div>
+
+     <script>
+     (function() {
+       const btn = document.getElementById('startBtn');
+       const msg = document.getElementById('message');
+       const welcome = document.getElementById('welcome');
+       const canvas = document.getElementById('flowers');
+       const ctx = canvas.getContext('2d');
+
+       function resizeCanvas() {
+         const dpr = Math.max(1, window.devicePixelRatio || 1);
+         canvas.width = Math.floor(window.innerWidth * dpr);
+         canvas.height = Math.floor(window.innerHeight * dpr);
+         canvas.style.width = window.innerWidth + 'px';
+         canvas.style.height = window.innerHeight + 'px';
+         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+       }
+       window.addEventListener('resize', resizeCanvas);
+       resizeCanvas();
+
+       let animationStarted = false;
+       const delayBeforeMessage = 1600; // ms: delay between button transition and message
+      const messageHoldMs = 3600;      // ms: time message stays fully visible before fade
+      const messageFadeMs = 1600;      // ms: must match CSS #message.fade-out transition-duration
+       btn.addEventListener('click', () => {
+        document.body.classList.add('started');
+        btn.classList.add('hidden');
+        if (welcome) {
+          welcome.classList.add('hide');
+          setTimeout(() => welcome.classList.add('hidden'), 1450);
+        }
+        setTimeout(() => {
+          msg.classList.add('show');
+          // start fade after hold
+          setTimeout(() => {
+            msg.classList.remove('show');
+            msg.classList.add('fade-out');
+            // show flowers as the message starts to blur/fade (crossfade)
+            canvas.classList.add('show');
+            if (!animationStarted) {
+              animationStarted = true;
+              startFlowers();
+            }
+          }, messageHoldMs);
+
+          // hide only after fade completes
+          setTimeout(() => {
+            msg.classList.add('hidden');
+          }, messageHoldMs + messageFadeMs);
+        }, delayBeforeMessage);
+      });
+
+       // Pastel Flowers Animation
+       class Flower {
+         constructor(x, y) {
+           this.x = x;
+           this.y = y;
+           this.petalCount = 5 + Math.floor(Math.random() * 4); // 5-8 petals
+           this.angle = Math.random() * Math.PI * 2;
+           this.rotationSpeed = (Math.random() * 0.004 - 0.002);
+           this.targetR = 20 + Math.random() * 40;
+           this.r = 2 + Math.random() * 4;
+           this.growth = 0.2 + Math.random() * 0.5;
+           this.wiggle = Math.random() * 0.2;
+           this.opacity = 0.0;
+           this.hue = Math.floor(Math.random() * 360);
+           this.sat = 45 + Math.random() * 15; // pastel saturation
+           this.light = 78 + Math.random() * 12; // pastel lightness
+           this.centerHue = (this.hue + 10) % 360;
+         }
+         update() {
+           if (this.r < this.targetR) this.r += this.growth;
+           if (this.opacity < 0.95) this.opacity += 0.02;
+           this.angle += this.rotationSpeed;
+         }
+         draw(ctx) {
+           ctx.save();
+           ctx.translate(this.x, this.y);
+           ctx.rotate(this.angle + Math.sin((this.x + this.y + performance.now() * 0.001) * 0.5) * this.wiggle);
+           const petals = this.petalCount;
+           for (let i = 0; i < petals; i++) {
+             ctx.save();
+             ctx.rotate((i * Math.PI * 2) / petals);
+             ctx.beginPath();
+             const r = this.r;
+             // Petal as a rounded teardrop using bezier
+             ctx.moveTo(0, 0);
+             ctx.bezierCurveTo(r * 0.2, -r * 0.2, r * 0.5, -r, 0, -r);
+             ctx.bezierCurveTo(-r * 0.5, -r, -r * 0.2, -r * 0.2, 0, 0);
+             ctx.closePath();
+             ctx.fillStyle = `hsla(${this.hue}, ${this.sat}%, ${this.light}%, ${this.opacity})`;
+             ctx.fill();
+             ctx.restore();
+           }
+           // Flower center
+           ctx.beginPath();
+           ctx.arc(0, 0, Math.max(2, this.r * 0.18), 0, Math.PI * 2);
+           ctx.fillStyle = `hsla(${this.centerHue}, 60%, 85%, ${Math.min(1, this.opacity + 0.2)})`;
+           ctx.fill();
+           ctx.restore();
+         }
+       }
+
+       // Tulip for the central bouquet
+       class Tulip {
+         constructor(x, y, scale, hue) {
+           this.x = x;
+           this.y = y;
+           this.scale = 0.1; // start small
+           this.targetScale = scale; // e.g., 0.7 - 1.2
+           this.hue = hue; // pastel hue
+           this.growth = 0.02 + Math.random() * 0.02; // grow a bit faster for larger size
+           this.swing = 0; // no lateral sway
+           this.angle = 0; // no rotation; negative Y in paths already grows upward
+           this.opacity = 0;
+         }
+         update() {
+           if (this.scale < this.targetScale) this.scale += this.growth;
+           if (this.opacity < 1) this.opacity += 0.02;
+         }
+         draw(ctx) {
+           ctx.save();
+           ctx.translate(this.x, this.y);
+           ctx.rotate(this.angle);
+           ctx.scale(this.scale, this.scale);
+
+           // Stem
+           ctx.strokeStyle = `hsla(120, 30%, 40%, ${this.opacity})`;
+           ctx.lineWidth = 4;
+           ctx.beginPath();
+           ctx.moveTo(0, 0);
+           ctx.bezierCurveTo(0, -60, 0, -120, 0, -150); // straight, vertical stem
+           ctx.stroke();
+
+           // Leaves
+          let leafGrad = ctx.createLinearGradient(0, -60, 0, 0);
+          leafGrad.addColorStop(0, `hsla(130, 40%, 40%, ${this.opacity})`);
+          leafGrad.addColorStop(1, `hsla(130, 55%, 68%, ${this.opacity})`);
+          ctx.fillStyle = leafGrad;
+          ctx.beginPath();
+          ctx.moveTo(0, -40);
+          ctx.bezierCurveTo(-44, -28, -30, -8, -4, -4);
+          ctx.bezierCurveTo(-18, -18, -12, -32, 0, -40);
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(0, -60);
+          ctx.bezierCurveTo(38, -46, 26, -18, 4, -10);
+          ctx.bezierCurveTo(12, -28, 10, -46, 0, -60);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = `hsla(130, 30%, 32%, ${this.opacity * 0.6})`;
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-2, -8);
+          ctx.quadraticCurveTo(-6, -26, 0, -60);
+          ctx.stroke();
+
+           // Tulip head (cup with three petals)
+          const petalLight = 80;
+          const topY = -150;
+          const baseY = -86;
+          function petalGradient() {
+            const g = ctx.createLinearGradient(0, topY, 0, baseY);
+            g.addColorStop(0, `hsla(${this.hue}, 70%, ${petalLight + 8}%, ${this.opacity})`);
+            g.addColorStop(0.6, `hsla(${this.hue}, 62%, ${petalLight - 2}%, ${this.opacity})`);
+            g.addColorStop(1, `hsla(${this.hue}, 55%, ${petalLight - 8}%, ${this.opacity})`);
+            return g;
+          }
+
+           // center petal
+           ctx.beginPath();
+          ctx.moveTo(0, -150);
+          ctx.bezierCurveTo(28, -150, 28, -110, 0, -94);
+          ctx.bezierCurveTo(-28, -110, -28, -150, 0, -150);
+          ctx.closePath();
+          ctx.fillStyle = petalGradient.call(this);
+          ctx.fill();
+          ctx.lineWidth = 1.2;
+          ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+          ctx.stroke();
+
+          // left petal
+          ctx.beginPath();
+          ctx.moveTo(0, -150);
+          ctx.bezierCurveTo(-8, -162, -30, -154, -32, -126);
+          ctx.bezierCurveTo(-32, -104, -10, -92, 0, -94);
+          ctx.closePath();
+          const leftGrad = ctx.createLinearGradient(-16, -150, -16, -90);
+          leftGrad.addColorStop(0, `hsla(${(this.hue + 8) % 360}, 68%, ${petalLight + 6}%, ${this.opacity})`);
+          leftGrad.addColorStop(1, `hsla(${(this.hue + 8) % 360}, 56%, ${petalLight - 6}%, ${this.opacity})`);
+          ctx.fillStyle = leftGrad;
+          ctx.fill();
+          ctx.stroke();
+
+          // right petal
+          ctx.beginPath();
+          ctx.moveTo(0, -150);
+          ctx.bezierCurveTo(8, -162, 30, -154, 32, -126);
+          ctx.bezierCurveTo(32, -104, 10, -92, 0, -94);
+          ctx.closePath();
+          const rightGrad = ctx.createLinearGradient(16, -150, 16, -90);
+          rightGrad.addColorStop(0, `hsla(${(this.hue + 340) % 360}, 68%, ${petalLight + 4}%, ${this.opacity})`);
+          rightGrad.addColorStop(1, `hsla(${(this.hue + 340) % 360}, 56%, ${petalLight - 8}%, ${this.opacity})`);
+          ctx.fillStyle = rightGrad;
+          ctx.fill();
+          ctx.stroke();
+
+          // Inner shading
+          const shade = ctx.createRadialGradient(0, -110, 4, 0, -110, 60);
+          shade.addColorStop(0, `rgba(0,0,0,${0.12 * this.opacity})`);
+          shade.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = shade;
+          ctx.beginPath();
+          ctx.ellipse(0, -112, 26, 18, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+           ctx.restore();
+         }
+       }
+
+       function startFlowers() {
+        const flowers = [];         // background
+        const tulips = [];          // central bouquet
+        let spawnTimer = 0;
+        let tulipTimer = 0;
+        let lastTime = performance.now();
+        let finalShown = false;
+
+        // Responsive parameters based on current viewport
+        function getResponsive() {
+          const w = canvas.clientWidth;
+          const h = canvas.clientHeight;
+          if (w <= 430) {
+            return {
+              cyBase: h * 0.74,
+              maxSpreadFactor: 0.38,
+              maxSpreadCap: 300,
+              minDist: 46,
+              scaleMin: 1.0,
+              scaleMax: 1.6,
+              maxTulips: 28,
+              tulipInterval: 220,
+              paperTopFactor: 0.46
+            };
+          } else if (w <= 768) {
+            return {
+              cyBase: h * 0.70,
+              maxSpreadFactor: 0.40,
+              maxSpreadCap: 320,
+              minDist: 50,
+              scaleMin: 1.1,
+              scaleMax: 1.8,
+              maxTulips: 34,
+              tulipInterval: 200,
+              paperTopFactor: 0.44
+            };
+          } else {
+            return {
+              cyBase: h * 0.68,
+              maxSpreadFactor: 0.42,
+              maxSpreadCap: 340,
+              minDist: 52,
+              scaleMin: 1.2,
+              scaleMax: 2.1,
+              maxTulips: 40,
+              tulipInterval: 180,
+              paperTopFactor: 0.50
+            };
+          }
+        }
+
+         // Background flower spawn
+         function spawnFlower() {
+           const margin = 40;
+           const x = margin + Math.random() * (canvas.clientWidth - margin * 2);
+           const y = margin + Math.random() * (canvas.clientHeight - margin * 2);
+           flowers.push(new Flower(x, y));
+           if (flowers.length > 260) flowers.shift();
+         }
+
+         // Bouquet spawn (ramo cónico: base común y abanico hacia arriba)
+         function spawnTulip() {
+          const cx = canvas.clientWidth / 2;
+          const cyBase = canvas.clientHeight * 0.68; // base del ramo, más abajo del centro
+          const attempts = 20;
+          const minDist = 52; // separación mínima entre tulipanes (un poco menor para más densidad)
+          let placed = false;
+          for (let i = 0; i < attempts && !placed; i++) {
+            // Altura relativa del tulipán respecto a la base (hacia arriba)
+            const offsetY = -240 + Math.random() * 240; // -240..0 (solo hacia arriba)
+            const progress = Math.min(1, Math.max(0, (-offsetY) / 240));
+            // Apertura en X crece con la altura para formar cono/abanico
+            const maxSpread = Math.min(canvas.clientWidth * 0.42, 340); // más ancho arriba
+            const spreadX = 10 + progress * maxSpread; // estrecho abajo, ancho arriba
+            const baseX = cx + (Math.random() * 2 - 1) * spreadX;
+            const baseY = cyBase + offsetY;
+            const scale = 1.2 + Math.random() * 0.9; // 1.2 - 2.1
+            const hue = 330 + Math.random() * 40; // magenta/rosa pastel
+            // comprobar separación
+            let ok = true;
+            for (let j = 0; j < tulips.length; j++) {
+              const dx = tulips[j].x - baseX;
+              const dy = tulips[j].y - baseY;
+              if (Math.hypot(dx, dy) < minDist) { ok = false; break; }
+            }
+            if (ok) {
+              tulips.push(new Tulip(baseX, baseY, scale, hue % 360));
+              placed = true;
+            }
+          }
+          if (!placed) {
+            tulips.push(new Tulip(cx, cyBase - 40, 1.5, 350));
+          }
+          if (tulips.length > 48) tulips.shift();
+        }
+
+       function frame(now) {
+          const dt = Math.min(32, now - lastTime);
+          lastTime = now;
+
+          // Soft clear for dreamy motion (slightly stronger to dim background)
+          ctx.fillStyle = 'rgba(255,255,255,0.12)';
+          ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+           // Background spawns
+           spawnTimer += dt;
+           const interval = 130; // fewer background flowers to highlight bouquet
+           while (spawnTimer >= interval) {
+             spawnFlower();
+             spawnTimer -= interval;
+           }
+
+           // Bouquet spawns
+           tulipTimer += dt;
+           const tulipInterval = getResponsive().tulipInterval; // responsive spawn rate
+         while (tulipTimer >= tulipInterval && tulips.length < getResponsive().maxTulips) {
+           spawnTulip();
+           tulipTimer -= tulipInterval;
+         }
+
+          // Mostrar mensaje final cuando se complete el ramo
+          if (!finalShown && tulips.length >= getResponsive().maxTulips) {
+            finalShown = true;
+            const fm = document.getElementById('finalMsg');
+            if (fm) {
+              // pequeña espera para que termine el último trazado
+              setTimeout(() => fm.classList.add('show'), 400);
+            }
+          }
+
+           // Update/draw background
+           for (let f of flowers) { f.update(); f.draw(ctx); }
+
+           // Soft spotlight behind bouquet to make it pop
+           const gx = canvas.clientWidth / 2;
+           const gy = canvas.clientHeight / 2;
+           const gr = Math.min(canvas.clientWidth, canvas.clientHeight) * 0.4;
+           const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+           grad.addColorStop(0, 'rgba(255,255,255,0.45)');
+           grad.addColorStop(1, 'rgba(255,255,255,0.0)');
+           ctx.fillStyle = grad;
+           ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+
+           // Draw bouquet on top, sort by baseY for nicer layering
+           tulips.forEach(t => t.update());
+           tulips.sort((a, b) => a.y - b.y);
+           for (let t of tulips) { t.draw(ctx); }
+
+          // Papel del ramo (envoltura cónica) por encima de las flores
+          ;(function drawPaper(){
+            const cx = canvas.clientWidth / 2;
+            const cyBase = canvas.clientHeight * 0.68;
+            const topY = cyBase - Math.min(canvas.clientHeight * 0.38, 320);
+            const widthTop = Math.min(canvas.clientWidth * 0.5, 420);
+            const widthBase = Math.min(canvas.clientWidth * 0.18, 160);
+
+            ctx.save();
+            ctx.globalAlpha = 0.9;
+            const paperFill = 'rgba(245, 231, 211, 0.7)';
+            const paperStroke = 'rgba(160, 140, 120, 0.28)';
+
+            ctx.beginPath();
+            ctx.moveTo(cx, cyBase + 6);
+            ctx.bezierCurveTo(cx - widthBase, cyBase - 10, cx - widthTop, (topY + cyBase) / 2, cx - widthTop * 0.9, topY);
+            ctx.lineTo(cx + widthTop * 0.9, topY);
+            ctx.bezierCurveTo(cx + widthTop, (topY + cyBase) / 2, cx + widthBase, cyBase - 10, cx, cyBase + 6);
+            ctx.closePath();
+            ctx.fillStyle = paperFill;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = paperStroke;
+            ctx.stroke();
+
+            // Pliegues frontales
+            ctx.beginPath();
+            ctx.moveTo(cx - 6, cyBase + 4);
+            ctx.quadraticCurveTo(cx - widthBase * 0.9, cyBase - 14, cx - widthBase * 0.45, cyBase - 40);
+            ctx.lineTo(cx - 8, cyBase - 10);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(255, 245, 233, 0.55)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.moveTo(cx + 6, cyBase + 4);
+            ctx.quadraticCurveTo(cx + widthBase * 0.9, cyBase - 14, cx + widthBase * 0.45, cyBase - 40);
+            ctx.lineTo(cx + 8, cyBase - 10);
+            ctx.closePath();
+            ctx.fill();
+
+            const gradTop = ctx.createLinearGradient(cx, topY, cx, topY + 80);
+            gradTop.addColorStop(0, 'rgba(0,0,0,0.06)');
+            gradTop.addColorStop(1, 'rgba(0,0,0,0.0)');
+            ctx.fillStyle = gradTop;
+            ctx.fillRect(cx - widthTop * 0.9, topY, widthTop * 1.8, 80);
+
+            ctx.restore();
+          })();
+
+          // Cinta en la base del ramo (encima del papel)
+          ;(function drawRibbon(){
+            const cx = canvas.clientWidth / 2;
+            const cy = canvas.clientHeight * 0.68;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.08)';
+            ctx.shadowBlur = 8;
+            ctx.fillStyle = 'rgba(253, 164, 175, 0.9)';
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, 14, 10, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(cx - 14, cy);
+            ctx.bezierCurveTo(cx - 44, cy - 18, cx - 56, cy - 6, cx - 26, cy + 8);
+            ctx.bezierCurveTo(cx - 40, cy - 4, cx - 28, cy + 4, cx - 14, cy);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(244, 114, 182, 0.85)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(cx + 14, cy);
+            ctx.bezierCurveTo(cx + 44, cy - 18, cx + 56, cy - 6, cx + 26, cy + 8);
+            ctx.bezierCurveTo(cx + 40, cy - 4, cx + 28, cy + 4, cx + 14, cy);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(cx - 6, cy + 6);
+            ctx.lineTo(cx - 20, cy + 40);
+            ctx.lineTo(cx - 2, cy + 18);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(236, 72, 153, 0.85)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(cx + 6, cy + 6);
+            ctx.lineTo(cx + 20, cy + 40);
+            ctx.lineTo(cx + 2, cy + 18);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+          })();
+
+           requestAnimationFrame(frame);
+         }
+
+         // Prime background to white
+         ctx.fillStyle = '#ffffff';
+         ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+         requestAnimationFrame(frame);
+       }
+     })();
+     </script>
+ </body>
+ </html>
